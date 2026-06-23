@@ -1,0 +1,95 @@
+name: Release Skills
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/SKILL.md'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create skills archive
+        run: |
+          # Find all skill directories (contain SKILL.md)
+          find . -name "SKILL.md" -type f | while read skill; do
+            dirname "$(dirname "$skill")"
+          done | sort -u > skills.txt
+          
+          # Create tar.gz with all skills
+          tar -czf skills.tar.gz -T skills.txt
+          
+          # Generate SHA256 checksum
+          sha256sum skills.tar.gz > skills.tar.gz.sha256
+      
+      - name: Create install script
+        run: |
+          cat > install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          INSTALL_DIR="${OPENCODE_SKILLS_DIR:-$HOME/.config/opencode/skills/personal}"
+          REPO="vanya1301/my-skills"
+          
+          echo "Installing skills to: $INSTALL_DIR"
+          mkdir -p "$INSTALL_DIR"
+          
+          # Download and verify
+          echo "Downloading skills archive..."
+          curl -L "https://github.com/$REPO/releases/latest/download/skills.tar.gz" -o /tmp/skills.tar.gz
+          
+          echo "Verifying checksum..."
+          curl -L "https://github.com/$REPO/releases/latest/download/skills.tar.gz.sha256" -o /tmp/skills.tar.gz.sha256
+          cd /tmp && sha256sum -c skills.tar.gz.sha256
+          
+          # Extract
+          echo "Extracting skills..."
+          tar -xzf /tmp/skills.tar.gz -C "$INSTALL_DIR" --strip-components=1
+          
+          echo "✓ Skills installed to $INSTALL_DIR"
+          echo "  Use 'ls $INSTALL_DIR' to see available skills"
+          EOF
+          
+          chmod +x install.sh
+      
+      - name: Get previous release
+        id: prev_release
+        run: |
+          PREV_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' || echo "")
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check if skills changed
+        id: check_changes
+        run: |
+          if [ -n "${{ steps.prev_release.outputs.prev_tag }}" ]; then
+            CHANGED=$(git diff --name-only ${{ steps.prev_release.outputs.prev_tag }}..HEAD -- '**/SKILL.md' | wc -l)
+          else
+            CHANGED=1  # First release
+          fi
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        if: steps.check_changes.outputs.changed != '0'
+        run: |
+          # Get list of changed skills for release notes
+          if [ -n "${{ steps.prev_release.outputs.prev_tag }}" ]; then
+            CHANGED_SKILLS=$(git diff --name-only ${{ steps.prev_release.outputs.prev_tag }}..HEAD -- '**/SKILL.md' | xargs -I {} dirname {} | sed 's|^./||' | sort -u | paste -sd ',' -)
+          else
+            CHANGED_SKILLS="Initial release"
+          fi
+          
+          gh release create "release-$(date +%Y%m%d-%H%M%S)" \
+            --title "Skills Release $(date +%Y-%m-%d)" \
+            --notes "Updated skills: $CHANGED_SKILLS" \
+            --latest \
+            skills.tar.gz skills.tar.gz.sha256 install.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }
