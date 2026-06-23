@@ -5,7 +5,7 @@ Collection of custom OpenCode skills.
 ## Installation
 
 ```bash
-git clone https://github.com/rianichev/personal-skills.git ~/.config/opencode/skills/personal
+git clone https://github.com/vanya1301/my-skills.git ~/.config/opencode/skills/personal
 ```
 
 ## Skills
