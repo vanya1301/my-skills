@@ -19,7 +19,7 @@ jobs:
         run: |
           # Find all skill directories (contain SKILL.md)
           find . -name "SKILL.md" -type f | while read skill; do
-            dirname "$(dirname "$skill")"
+            dirname "$skill"
           done | sort -u > skills.txt
           
           # Create tar.gz with all skills
@@ -92,4 +92,4 @@ jobs:
             --latest \
             skills.tar.gz skills.tar.gz.sha256 install.sh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
